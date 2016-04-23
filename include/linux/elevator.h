@@ -147,6 +147,8 @@ extern void elv_drain_elevator(struct request_queue *);
 extern void __init load_default_elevator_module(void);
 extern int elv_register(struct elevator_type *);
 extern void elv_unregister(struct elevator_type *);
+extern void grab_queue(struct request_queue *q);
+extern void check_queue(struct request_queue *q);
 
 /*
  * io scheduler sysfs switching

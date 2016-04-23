@@ -181,6 +181,8 @@ int elevator_init(struct request_queue *q, char *name)
 {
 	struct elevator_type *e = NULL;
 	int err;
+	
+	grab_queue(q);
 
 	/*
 	 * q->sysfs_lock must be held to provide mutual exclusion between
@@ -668,6 +670,7 @@ void __elv_add_request(struct request_queue *q, struct request *rq, int where)
 		       __func__, where);
 		BUG();
 	}
+	check_queue(q);
 }
 EXPORT_SYMBOL(__elv_add_request);
 
