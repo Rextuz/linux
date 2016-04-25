@@ -4,16 +4,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/init.h>
-
-struct queue_list {
-  struct request_queue *q;
-  struct queue_list *next;
-}_ql;
-
-struct queue_list *ql, *ql_tail;
-
-int queue_length(struct request_queue *q);
-void add_to_list(struct request_queue *new_q);
+#include "sched-monitor.h"
 
 static int monitor_init(void)
 {
@@ -21,13 +12,12 @@ static int monitor_init(void)
 	ql = ql_tail = &_ql;
 	ql->next = ql;
 
-	printk(KERN_ALERT "iosched monitor enabled");
 	return 0;
 }
 
 static void monitor_exit(void)
 {
-	printk(KERN_ALERT "iosched monitor disabled");
+	// TODO Cleanup
 }
 
 void add_not_empty(struct request_queue *new_q)
@@ -43,12 +33,58 @@ void add_not_empty(struct request_queue *new_q)
 void add_to_list(struct request_queue *new_q)
 {
 	if (ql == ql_tail)
+	{
 		ql->q = new_q;
+	}
 	else
 	{
 		add_not_empty(new_q);
 	}	
 }
+
+int number_of_tracked_queues(void)
+{
+	struct queue_list *t = ql;
+	int count = 1;
+	
+	// Check if the list is empty
+	if (ql->q == NULL)
+	{
+		return 0;
+	}
+		
+	while (t != ql_tail)
+	{
+		t = ql->next;
+		count++;
+	}
+	
+	return count;
+}
+
+/****************************************/
+
+int queue_length(struct request_queue *q)
+{
+	struct list_head *ptr = &q->queue_head;
+        int length = 1;
+        
+        if (ptr == NULL)
+        {
+            return 0;
+        }
+        
+        ptr = ptr->next;
+        while (ptr != &q->queue_head)
+        {
+                length++;
+                ptr = ptr->next;
+        }
+        
+        return length;
+}
+
+/**************************************/
 
 void grab_queue(struct request_queue *q)
 {
@@ -58,31 +94,10 @@ EXPORT_SYMBOL(grab_queue);
 
 void check_queue(struct request_queue *q)
 {
-  printk( KERN_ALERT "Length=%i", queue_length(q));
+	// queue_length(q);
+	// printk( KERN_ALERT "Length of a queue %i\n", queue_length(q));
 }
 EXPORT_SYMBOL(check_queue);
-
-int queue_length(struct request_queue *q)
-{
-	// TODO queue length
-/*
-	struct list_head *head, *t;
-	int length = 0;
-	struct noop_data *nd = q->elevator->elevator_data;
-	
-	// head = &(q->elevator->type->list);
-
-	head = &nd->queue;
-	t = head->next;
-
-	while (t != head)
-	{
-		length++;
-		t = t->next;
-	}
-	return length;*/
-	return -1;
-}
 
 module_init(monitor_init);
 module_exit(monitor_exit);
