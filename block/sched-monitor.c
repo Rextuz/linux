@@ -44,22 +44,21 @@ void add_to_list(struct request_queue *new_q)
 
 int number_of_tracked_queues(void)
 {
+	return queue_index(ql_tail->q) + 1;
+}
+
+int queue_index(struct request_queue *q)
+{
 	struct queue_list *t = ql;
-	int count = 1;
-	
-	// Check if the list is empty
-	if (ql->q == NULL)
+	int index = 0;
+
+	while (t->q != q)
 	{
-		return 0;
+		t = t->next;
+		index++;
 	}
-		
-	while (t != ql_tail)
-	{
-		t = ql->next;
-		count++;
-	}
-	
-	return count;
+
+	return index;
 }
 
 /****************************************/
@@ -84,6 +83,58 @@ int queue_length(struct request_queue *q)
         return length;
 }
 
+int block_queue(struct request_queue *q)
+{
+	// TODO Block q
+	return 1;
+}
+
+int block_queues(struct request_queue *first, int n)
+{
+	struct queue_list *t = ql;
+	int n_blocked = 0, index = 0;
+
+	// Find first
+	while (t->q != first)
+	{
+		t = t->next;
+	}
+
+	while (index < n)
+	{
+		n_blocked += block_queue(t->q);
+		index++;
+	}
+
+	return n_blocked;
+}
+
+int release_queue(struct request_queue *q)
+{
+	// TODO unblock
+	return 1;
+}
+
+int release_all()
+{
+	struct queue_list *t = ql;
+	int n_released = 0;
+
+	if (t->q == NULL)
+	{
+		return 0;
+	}
+
+	do
+	{
+		n_released += release_queue(t->q);
+		t = t->next;
+	}
+	while (t != ql);
+
+	return n_released;
+}
+
 /**************************************/
 
 void grab_queue(struct request_queue *q)
@@ -95,9 +146,14 @@ EXPORT_SYMBOL(grab_queue);
 void check_queue(struct request_queue *q)
 {
 	// queue_length(q);
-	// printk( KERN_ALERT "Length of a queue %i\n", queue_length(q));
+	printk( KERN_ALERT "Length of a queue %i; Queues:%i\n", queue_length(q), number_of_tracked_queues());
 }
 EXPORT_SYMBOL(check_queue);
+
+#ifdef SCHED_MONITOR_DEBUG
+// Debug functions
+
+#endif
 
 module_init(monitor_init);
 module_exit(monitor_exit);
