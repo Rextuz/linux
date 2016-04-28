@@ -27,6 +27,7 @@ void add_not_empty(struct request_queue *new_q)
 
 	ql_tail->next = new_node;
 	new_node->q = new_q;
+	new_node->blocked = 0;
 	ql_tail = new_node;	
 }
 
@@ -35,6 +36,7 @@ void add_to_list(struct request_queue *new_q)
 	if (ql == ql_tail)
 	{
 		ql->q = new_q;
+		ql->blocked = 0;
 	}
 	else
 	{
@@ -47,6 +49,18 @@ int number_of_tracked_queues(void)
 	return queue_index(ql_tail->q) + 1;
 }
 
+struct queue_list * find_q(struct request_queue *q)
+{
+	struct queue_list *t = ql;
+	
+	while (t->q != q)
+	{
+		t = t->next;
+	}
+	
+	return t;
+}
+
 int queue_index(struct request_queue *q)
 {
 	struct queue_list *t = ql;
@@ -56,6 +70,10 @@ int queue_index(struct request_queue *q)
 	{
 		t = t->next;
 		index++;
+		if (t == ql)
+		{
+			return -1;
+		}
 	}
 
 	return index;
@@ -85,8 +103,13 @@ int queue_length(struct request_queue *q)
 
 int block_queue(struct request_queue *q)
 {
-	// TODO Block q
-	return 1;
+	if (spin_trylock(q->queue_lock))
+	{
+		spin_lock(q->queue_lock);
+		find_q(q)->blocked = 1;
+		return 1;
+	}
+	return 0;
 }
 
 int block_queues(struct request_queue *first, int n)
@@ -111,8 +134,13 @@ int block_queues(struct request_queue *first, int n)
 
 int release_queue(struct request_queue *q)
 {
-	// TODO unblock
-	return 1;
+	if (find_q(q)->blocked)
+	{
+		spin_unlock(q->queue_lock);
+		find_q(q)->blocked = 0;
+		return 1;
+	}
+	return 0;
 }
 
 int release_all()
@@ -140,13 +168,14 @@ int release_all()
 void grab_queue(struct request_queue *q)
 {
 	add_to_list(q);
+	printk( KERN_ALERT "Q index: %i", queue_index(q));
 }
 EXPORT_SYMBOL(grab_queue);
 
 void check_queue(struct request_queue *q)
 {
 	// queue_length(q);
-	printk( KERN_ALERT "Length of a queue %i; Queues:%i\n", queue_length(q), number_of_tracked_queues());
+	//
 }
 EXPORT_SYMBOL(check_queue);
 
