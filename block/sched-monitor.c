@@ -44,11 +44,6 @@ void add_to_list(struct request_queue *new_q)
 	}	
 }
 
-int number_of_tracked_queues(void)
-{
-	return queue_index(ql_tail->q) + 1;
-}
-
 struct queue_list * find_q(struct request_queue *q)
 {
 	struct queue_list *t = ql;
@@ -80,26 +75,6 @@ int queue_index(struct request_queue *q)
 }
 
 /****************************************/
-
-int queue_length(struct request_queue *q)
-{
-	struct list_head *ptr = &q->queue_head;
-        int length = 1;
-        
-        if (ptr == NULL)
-        {
-            return 0;
-        }
-        
-        ptr = ptr->next;
-        while (ptr != &q->queue_head)
-        {
-                length++;
-                ptr = ptr->next;
-        }
-        
-        return length;
-}
 
 int block_queue(struct request_queue *q)
 {
@@ -174,8 +149,7 @@ EXPORT_SYMBOL(grab_queue);
 
 void check_queue(struct request_queue *q)
 {
-	// queue_length(q);
-	//
+	printk( KERN_ALERT "Queue length is %i, Queue index is %i/%i\n", queue_length(q), queue_index(q), tracked_queues());
 }
 EXPORT_SYMBOL(check_queue);
 

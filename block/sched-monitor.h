@@ -10,18 +10,19 @@ struct queue_list {
   int blocked;
 }_ql;
 
+#define queue_length(q) q->nr_sorted					// Find out number of requests in the list
+#define tracked_queues() queue_index(ql_tail->q) + 1	// Number of tracked queues
+
 // Pointers to the head and tail of the list
 struct queue_list *ql, *ql_tail;
 
 // Operations with the list
 void add_not_empty(struct request_queue *new_q);		// Track a first queue
-void add_to_list(struct request_queue *new_q);			// Track a new queue
-int number_of_tracked_queues(void);						// Number of tracked queues
+void add_to_list(struct request_queue *new_q);			// Track a new queue	
 int queue_index(struct request_queue *q);				// Find an index of a queue
 struct queue_list * find_q(struct request_queue *q);	// Find a queue in the list
 
 // Operations with the queue
-int queue_length(struct request_queue *q);				// Find out number of requests in the list
 int block_queue(struct request_queue *q);				// Stop queue from moving, returns 1 if success
 int block_queues(struct request_queue *first, int n);	// Block n queues from first and on, returns number of blocked queues
 int release_queue(struct request_queue *q);				// Unblock queue
