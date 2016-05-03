@@ -8,17 +8,14 @@ struct queue_list {
   struct request_queue *q;
   struct queue_list *next;
   int blocked;
-}_ql;
+};
 
 #define queue_length(q) q->nr_sorted					// Find out number of requests in the list
 #define tracked_queues() queue_index(ql_tail->q) + 1	// Number of tracked queues
 
-// Pointers to the head and tail of the list
-struct queue_list *ql, *ql_tail;
-
 // Operations with the list
-void add_not_empty(struct request_queue *new_q);		// Track a first queue
-void add_to_list(struct request_queue *new_q);			// Track a new queue	
+void list_init(struct request_queue *q);
+void add(struct request_queue *new_q);					// Track a first queue
 int queue_index(struct request_queue *q);				// Find an index of a queue
 struct queue_list * find_q(struct request_queue *q);	// Find a queue in the list
 
@@ -34,7 +31,7 @@ void check_queue(struct request_queue *q);
 
 #ifdef SCHED_MONITOR_DEBUG
 // Debug functions
-
+void print_queues(void);
 #endif
 
 #endif

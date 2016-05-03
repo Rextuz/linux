@@ -6,12 +6,11 @@
 #include <linux/init.h>
 #include "sched-monitor.h"
 
-static int monitor_init(void)
-{
-	// List init
-	ql = ql_tail = &_ql;
-	ql->next = ql;
+struct queue_list *ql;
 
+static int monitor_init(void)
+{	
+	ql = NULL;
 	return 0;
 }
 
@@ -20,28 +19,42 @@ static void monitor_exit(void)
 	// TODO Cleanup
 }
 
-void add_not_empty(struct request_queue *new_q)
+void list_init(struct request_queue *new_q)
 {
-	struct queue_list _new_node, *new_node;
-	new_node = &_new_node;
-
-	ql_tail->next = new_node;
-	new_node->q = new_q;
-	new_node->blocked = 0;
-	ql_tail = new_node;	
+	ql = kcalloc(1, sizeof *ql, GFP_KERNEL);
+	
+	printk( KERN_ALERT "Initializing the list with %p\n", new_q );
+		
+	ql->q = new_q;
+	ql->next = NULL;
+	ql->blocked = 0;
 }
 
-void add_to_list(struct request_queue *new_q)
+void add(struct request_queue *new_q)
 {
-	if (ql == ql_tail)
+	struct queue_list *new_node, *t;
+	
+	if (ql == NULL)
 	{
-		ql->q = new_q;
-		ql->blocked = 0;
+		list_init(new_q);
+		return;
 	}
-	else
+	
+	t = ql;
+	while (t->next != NULL)
 	{
-		add_not_empty(new_q);
-	}	
+		t = t->next;
+	}
+	
+	printk( KERN_ALERT "Adding not empty %p\n", new_q );
+	
+	new_node = kcalloc(1, sizeof *new_node, GFP_KERNEL);
+
+	new_node->q = new_q;
+	new_node->next = NULL;
+	new_node->blocked = 0;
+	
+	t->next = new_node;
 }
 
 struct queue_list * find_q(struct request_queue *q)
@@ -142,20 +155,31 @@ int release_all()
 
 void grab_queue(struct request_queue *q)
 {
-	add_to_list(q);
-	printk( KERN_ALERT "Q index: %i", queue_index(q));
+	add(q);
+	print_queues();
 }
 EXPORT_SYMBOL(grab_queue);
 
 void check_queue(struct request_queue *q)
 {
-	printk( KERN_ALERT "Queue length is %i, Queue index is %i/%i\n", queue_length(q), queue_index(q), tracked_queues());
+	
 }
 EXPORT_SYMBOL(check_queue);
 
 #ifdef SCHED_MONITOR_DEBUG
 // Debug functions
-
+void print_queues()
+{
+	struct queue_list *t = ql;
+	int count = 0;
+	
+	while (t != NULL)
+	{
+		printk( KERN_ALERT "%i: %p\n", count, t->q );
+		t = t->next;
+		count++;
+	}
+}
 #endif
 
 module_init(monitor_init);
