@@ -16,7 +16,12 @@ static int monitor_init(void)
 
 static void monitor_exit(void)
 {
-	// TODO Cleanup
+	while (ql != NULL)
+	{
+		// TODO
+		ql = NULL;
+		// free(tail());
+	}
 }
 
 void list_init(struct request_queue *new_q)
@@ -57,6 +62,32 @@ void add(struct request_queue *new_q)
 	t->next = new_node;
 }
 
+int size()
+{
+	struct queue_list *t = ql;
+	int count = 0;
+	
+	while (t != NULL)
+	{
+		t = t->next;
+		count++;
+	}
+	
+	return count;
+}
+
+struct queue_list * tail()
+{
+	struct queue_list *tail = ql;
+	
+	while (tail->next != NULL)
+	{
+		tail = tail->next;
+	}
+	
+	return tail;
+}
+
 struct queue_list * find_q(struct request_queue *q)
 {
 	struct queue_list *t = ql;
@@ -78,10 +109,6 @@ int queue_index(struct request_queue *q)
 	{
 		t = t->next;
 		index++;
-		if (t == ql)
-		{
-			return -1;
-		}
 	}
 
 	return index;
@@ -89,12 +116,14 @@ int queue_index(struct request_queue *q)
 
 /****************************************/
 
-int block_queue(struct request_queue *q)
+int block_queue(struct queue_list *node)
 {
+	struct request_queue *q = node->q;
+	
 	if (spin_trylock(q->queue_lock))
 	{
 		spin_lock(q->queue_lock);
-		find_q(q)->blocked = 1;
+		node->blocked = 1;
 		return 1;
 	}
 	return 0;
@@ -111,18 +140,20 @@ int block_queues(struct request_queue *first, int n)
 		t = t->next;
 	}
 
-	while (index < n)
+	while (index < n || t != NULL)
 	{
-		n_blocked += block_queue(t->q);
+		n_blocked += block_queue(t);
 		index++;
 	}
 
 	return n_blocked;
 }
 
-int release_queue(struct request_queue *q)
+int release_queue(struct queue_list *node)
 {
-	if (find_q(q)->blocked)
+	struct request_queue *q = node->q;
+	
+	if (node->blocked)
 	{
 		spin_unlock(q->queue_lock);
 		find_q(q)->blocked = 0;
@@ -136,17 +167,11 @@ int release_all()
 	struct queue_list *t = ql;
 	int n_released = 0;
 
-	if (t->q == NULL)
+	while (t != NULL)
 	{
-		return 0;
-	}
-
-	do
-	{
-		n_released += release_queue(t->q);
+		n_released += release_queue(t);
 		t = t->next;
 	}
-	while (t != ql);
 
 	return n_released;
 }
