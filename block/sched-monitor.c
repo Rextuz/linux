@@ -4,13 +4,33 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/init.h>
+#include <linux/jiffies.h>
 #include "sched-monitor.h"
 
-struct queue_list *ql, *target;
+#define NUMBER_OF_TARGETS 3
+#define JAMMED_LENGTH 10
+
+struct queue_list *ql;
+struct queue_list * targets[NUMBER_OF_TARGETS];
+
+unsigned long time;
+int cleanup, tmp;
 
 static int monitor_init(void)
 {	
+	int i = 0;
+	
+	for (i = 0; i < NUMBER_OF_TARGETS; i++)
+	{
+		targets[i] = NULL;
+	}
+	
+	time = jiffies;
+	cleanup = 0;
+	tmp = 0;
+	
 	ql = NULL;
+	
 	return 0;
 }
 
@@ -34,7 +54,7 @@ void list_init(struct request_queue *new_q)
 	ql->next = NULL;
 	ql->blocked = 0;
 	
-	target = ql;
+	targets[tmp++] = ql;
 }
 
 void add(struct request_queue *new_q)
@@ -62,6 +82,11 @@ void add(struct request_queue *new_q)
 	new_node->blocked = 0;
 	
 	t->next = new_node;
+	
+	if (tmp < NUMBER_OF_TARGETS)
+	{
+		targets[tmp++] = new_node;
+	}
 }
 
 int size()
@@ -90,18 +115,6 @@ struct queue_list * tail()
 	return tail;
 }
 
-struct queue_list * find_q(struct request_queue *q)
-{
-	struct queue_list *t = ql;
-	
-	while (t->q != q)
-	{
-		t = t->next;
-	}
-	
-	return t;
-}
-
 int queue_index(struct request_queue *q)
 {
 	struct queue_list *t = ql;
@@ -122,32 +135,38 @@ int block_queue(struct queue_list *node)
 {
 	struct request_queue *q = node->q;
 	
+	/*
 	if (spin_trylock(q->queue_lock))
 	{
-		spin_lock(q->queue_lock);
 		node->blocked = 1;
 		return 1;
-	}
-	return 0;
+	}*/
+	
+	node->blocked = 1;
+	return 1;
+	
+	//return 0;
 }
 
-int block_queues(struct request_queue *first, int n)
+int block_all()
 {
 	struct queue_list *t = ql;
-	int n_blocked = 0, index = 0;
-
-	// Find first
-	while (t->q != first)
+	int n_blocked = 0;
+	
+	if (ql->next != NULL)
 	{
+		t = ql->next->next;
+	}
+	
+	while(t != NULL)
+	{
+		if (!is_target(t))
+		{
+			n_blocked += block_queue(t);
+		}
 		t = t->next;
 	}
-
-	while (index < n || t != NULL)
-	{
-		n_blocked += block_queue(t);
-		index++;
-	}
-
+	
 	return n_blocked;
 }
 
@@ -158,7 +177,7 @@ int release_queue(struct queue_list *node)
 	if (node->blocked)
 	{
 		spin_unlock(q->queue_lock);
-		find_q(q)->blocked = 0;
+		node->blocked = 0;
 		return 1;
 	}
 	return 0;
@@ -180,9 +199,17 @@ int release_all()
 
 int jammed()
 {
-	if (queue_length(target->q) > 10)
+	int i = 0;
+	
+	for (i = 0; i < NUMBER_OF_TARGETS; i++)
 	{
-		return 1;
+		if (targets[i] != NULL)
+		{
+			if (queue_length(targets[i]->q) > JAMMED_LENGTH)
+			{
+				return 1;
+			}
+		}
 	}
 	
 	return 0;
@@ -195,7 +222,7 @@ int length_others(void)
 	
 	while(t != NULL)
 	{
-		if (t->q != target->q)
+		if (!is_target(t))
 		{
 			length += queue_length(t->q);
 		}
@@ -203,6 +230,21 @@ int length_others(void)
 	}
 	
 	return length;
+}
+
+int is_target(struct queue_list *node)
+{
+	int i = 0;
+	
+	for (i = 0; i < NUMBER_OF_TARGETS; i++)
+	{
+		if (node == targets[i])
+		{
+			return 1;
+		}
+	}
+	
+	return 0;
 }
 
 /**************************************/
@@ -215,8 +257,39 @@ void grab_queue(struct request_queue *q)
 EXPORT_SYMBOL(grab_queue);
 
 void check_queue(struct request_queue *q)
-{
-	printk( KERN_ALERT "target=%i, others=%i, jammed=%i\n", queue_length(target->q), length_others(), jammed());
+{	
+	int i = 0;
+	
+	if (jiffies - time > HZ/10)	// Check every 100ms
+	{
+		time = jiffies;
+		
+		for (i = 0; i < NUMBER_OF_TARGETS; i++)
+		{
+			if (targets[i] != NULL)
+			{
+				printk( KERN_ALERT "target[%i] length is %i\n", i, queue_length(targets[i]->q) );
+			}
+		}
+		
+		printk( KERN_ALERT "others length is %i. Any targets jammed? %i\n", length_others(), jammed() );
+		if (!cleanup)
+		{
+			if (jammed())
+			{
+				cleanup = 1;
+				printk( KERN_ALERT "blocked %i queues\n", block_all() );
+			}
+		}
+		else
+		{
+			if (!jammed())
+			{
+				cleanup = 0;
+				printk( KERN_ALERT "unblocked %i queues\n", release_all() );
+			}
+		}
+	}
 }
 EXPORT_SYMBOL(check_queue);
 
@@ -229,7 +302,6 @@ void print_queues()
 	
 	while (t != NULL)
 	{
-		printk( KERN_ALERT "%i: %p\n", count, t->q );
 		t = t->next;
 		count++;
 	}
