@@ -6,7 +6,7 @@
 #include <linux/init.h>
 #include "sched-monitor.h"
 
-struct queue_list *ql;
+struct queue_list *ql, *target;
 
 static int monitor_init(void)
 {	
@@ -33,6 +33,8 @@ void list_init(struct request_queue *new_q)
 	ql->q = new_q;
 	ql->next = NULL;
 	ql->blocked = 0;
+	
+	target = ql;
 }
 
 void add(struct request_queue *new_q)
@@ -176,6 +178,33 @@ int release_all()
 	return n_released;
 }
 
+int jammed()
+{
+	if (queue_length(target->q) > 10)
+	{
+		return 1;
+	}
+	
+	return 0;
+}
+
+int length_others(void)
+{
+	struct queue_list *t = ql;
+	int length = 0;
+	
+	while(t != NULL)
+	{
+		if (t->q != target->q)
+		{
+			length += queue_length(t->q);
+		}
+		t = t->next;
+	}
+	
+	return length;
+}
+
 /**************************************/
 
 void grab_queue(struct request_queue *q)
@@ -187,7 +216,7 @@ EXPORT_SYMBOL(grab_queue);
 
 void check_queue(struct request_queue *q)
 {
-	
+	printk( KERN_ALERT "target=%i, others=%i, jammed=%i\n", queue_length(target->q), length_others(), jammed());
 }
 EXPORT_SYMBOL(check_queue);
 
