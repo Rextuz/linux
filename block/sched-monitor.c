@@ -5,9 +5,10 @@
 #include <linux/slab.h>
 #include <linux/init.h>
 #include <linux/jiffies.h>
+#include <linux/mutex.h>
 #include "sched-monitor.h"
 
-#define NUMBER_OF_TARGETS 3
+#define NUMBER_OF_TARGETS 2
 #define JAMMED_LENGTH 10
 
 struct queue_list *ql;
@@ -135,17 +136,13 @@ int block_queue(struct queue_list *node)
 {
 	struct request_queue *q = node->q;
 	
-	/*
-	if (spin_trylock(q->queue_lock))
+	if (mutex_trylock(&q->elevator->sysfs_lock))
 	{
 		node->blocked = 1;
 		return 1;
-	}*/
+	}
 	
-	node->blocked = 1;
-	return 1;
-	
-	//return 0;
+	return 0;
 }
 
 int block_all()
@@ -176,7 +173,7 @@ int release_queue(struct queue_list *node)
 	
 	if (node->blocked)
 	{
-		spin_unlock(q->queue_lock);
+		mutex_unlock(&q->elevator->sysfs_lock);
 		node->blocked = 0;
 		return 1;
 	}
@@ -272,7 +269,7 @@ void check_queue(struct request_queue *q)
 			}
 		}
 		
-		printk( KERN_ALERT "others length is %i. Any targets jammed? %i\n", length_others(), jammed() );
+		printk( KERN_ALERT "others length is %i. ||TOTAL QUEUES = %i|| Any targets jammed? %i\n", length_others(), size(), jammed() );
 		if (!cleanup)
 		{
 			if (jammed())
