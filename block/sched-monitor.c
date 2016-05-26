@@ -8,24 +8,17 @@
 #include <linux/mutex.h>
 #include "sched-monitor.h"
 
-#define NUMBER_OF_TARGETS 2
-#define JAMMED_LENGTH 10
+int number_of_targets = 2;
+int default_max_rq = 10;
 
-struct queue_list *ql;
-struct queue_list * targets[NUMBER_OF_TARGETS];
+struct queue_list * ql;
+struct queue_list * targets_end;
 
 unsigned long time;
 int cleanup, tmp;
 
 static int monitor_init(void)
-{	
-	int i = 0;
-	
-	for (i = 0; i < NUMBER_OF_TARGETS; i++)
-	{
-		targets[i] = NULL;
-	}
-	
+{			
 	time = jiffies;
 	cleanup = 0;
 	tmp = 0;
@@ -55,7 +48,8 @@ void list_init(struct request_queue *new_q)
 	ql->next = NULL;
 	ql->blocked = 0;
 	
-	targets[tmp++] = ql;
+	targets_end = ql;
+	targets_end->max_rq = default_max_rq;
 }
 
 void add(struct request_queue *new_q)
@@ -84,9 +78,10 @@ void add(struct request_queue *new_q)
 	
 	t->next = new_node;
 	
-	if (tmp < NUMBER_OF_TARGETS)
+	if (size() <= number_of_targets)
 	{
-		targets[tmp++] = new_node;
+		targets_end = new_node;
+		targets_end->max_rq = default_max_rq;
 	}
 }
 
@@ -196,17 +191,18 @@ int release_all()
 
 int jammed()
 {
-	int i = 0;
+	struct queue_list * t = ql;
 	
-	for (i = 0; i < NUMBER_OF_TARGETS; i++)
+	while (t != targets_end->next)
 	{
-		if (targets[i] != NULL)
+		if (t != NULL)
 		{
-			if (queue_length(targets[i]->q) > JAMMED_LENGTH)
+			if (queue_length(t->q) > t->max_rq)
 			{
 				return 1;
 			}
 		}
+		t = t->next;
 	}
 	
 	return 0;
@@ -231,14 +227,15 @@ int length_others(void)
 
 int is_target(struct queue_list *node)
 {
-	int i = 0;
+	struct queue_list * t = ql;
 	
-	for (i = 0; i < NUMBER_OF_TARGETS; i++)
+	while (t != targets_end->next)
 	{
-		if (node == targets[i])
+		if (node == t)
 		{
 			return 1;
 		}
+		t = t->next;
 	}
 	
 	return 0;
@@ -249,24 +246,26 @@ int is_target(struct queue_list *node)
 void grab_queue(struct request_queue *q)
 {
 	add(q);
-	print_queues();
 }
 EXPORT_SYMBOL(grab_queue);
 
 void check_queue(struct request_queue *q)
 {	
 	int i = 0;
+	struct queue_list *t;
 	
 	if (jiffies - time > HZ/10)	// Check every 100ms
 	{
 		time = jiffies;
 		
-		for (i = 0; i < NUMBER_OF_TARGETS; i++)
+		t = ql; i = 0;
+		while (t != targets_end->next)
 		{
-			if (targets[i] != NULL)
+			if (t != NULL)
 			{
-				printk( KERN_ALERT "target[%i] length is %i\n", i, queue_length(targets[i]->q) );
+				printk( KERN_ALERT "target[%i] length is %i[%i]\n", i++, queue_length(t->q), t->max_rq);
 			}
+			t = t->next;
 		}
 		
 		printk( KERN_ALERT "others length is %i. ||TOTAL QUEUES = %i|| Any targets jammed? %i\n", length_others(), size(), jammed() );
@@ -290,20 +289,31 @@ void check_queue(struct request_queue *q)
 }
 EXPORT_SYMBOL(check_queue);
 
-#ifdef SCHED_MONITOR_DEBUG
-// Debug functions
-void print_queues()
+void set_jammed_length(int i, int n)
 {
-	struct queue_list *t = ql;
 	int count = 0;
+	struct queue_list * t = ql;
 	
-	while (t != NULL)
+	while (count != i)
 	{
-		t = t->next;
 		count++;
+		t = t->next;
+	}
+	
+	t->max_rq = n;
+}
+EXPORT_SYMBOL(set_jammed_length);
+
+void set_number_of_targets(int n)
+{
+	int counter = 0;
+	targets_end = ql;
+	
+	while (counter < n && targets_end != NULL)
+	{
+		targets_end = targets_end->next;
 	}
 }
-#endif
 
 module_init(monitor_init);
 module_exit(monitor_exit);
