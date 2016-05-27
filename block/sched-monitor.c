@@ -6,6 +6,12 @@
 #include <linux/init.h>
 #include <linux/jiffies.h>
 #include <linux/mutex.h>
+#include <linux/printk.h>
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
+#include <linux/init.h>
+#include <linux/fs.h>
+#include <linux/string.h>
 #include "sched-monitor.h"
 
 int number_of_targets = 2;
@@ -17,25 +23,81 @@ struct queue_list * targets_end;
 unsigned long time;
 int cleanup, tmp;
 
+static struct kobject * targets_kobject;
+
+static ssize_t targets_show(struct kobject * kobj, struct kobj_attribute * attr, char * buf)
+{
+	return sprintf(buf, "%i\n", number_of_targets);
+}
+
+static ssize_t targets_store(struct kobject *kobj, struct kobj_attribute *attr, char *buf, size_t count)
+{
+	sscanf(buf, "%i", &number_of_targets);
+	set_number_of_targets(number_of_targets);
+	
+	return count;
+}
+
+static ssize_t max_rq_show(struct kobject * kobj, struct kobj_attribute * attr, char * buf)
+{
+	struct queue_list * t = ql;
+	char * tmp = kcalloc(64, 1, GFP_KERNEL);
+	int counter = 0;
+	
+	sprintf(tmp, "______________________\n");
+	strcat(buf, tmp);
+	sprintf(tmp, "|Queue | max requests|\n");
+	strcat(buf, tmp);
+	while (t != targets_end->next)
+	{
+		sprintf(tmp, "|  %i   |      %i     |\n", counter++, t->max_rq);
+		strcat(buf, tmp);
+		
+		t = t->next;
+	}
+	
+	printk( KERN_ALERT "length=%i\n", strlen(buf) );
+	return strlen(buf);
+}
+
+static ssize_t max_rq_store(struct kobject *kobj, struct kobj_attribute *attr, char *buf, size_t count)
+{
+	int i, n;
+	
+	sscanf(buf, "%i %i", &i, &n);
+	set_jammed_length(i, n);
+	
+	return count;
+}
+
+static struct kobj_attribute targets_attribute =__ATTR(number_of_targets, 0660, targets_show, targets_store);
+static struct kobj_attribute max_rq_attribute =__ATTR(max_rq, 0660, max_rq_show, max_rq_store);
+
 static int monitor_init(void)
-{			
+{	
+	int error = 0;
+	
 	time = jiffies;
 	cleanup = 0;
 	tmp = 0;
 	
 	ql = NULL;
 	
+	/* sysfs */
+	targets_kobject = kobject_create_and_add("sched_monitor", kernel_kobj);
+	if(!targets_kobject)
+			return -ENOMEM;
+
+	sysfs_create_file(targets_kobject, &targets_attribute.attr);
+	sysfs_create_file(targets_kobject, &max_rq_attribute.attr);
+	/* sysfs */
+	
 	return 0;
 }
 
 static void monitor_exit(void)
 {
-	while (ql != NULL)
-	{
-		// TODO
-		ql = NULL;
-		// free(tail());
-	}
+	
 }
 
 void list_init(struct request_queue *new_q)
@@ -306,10 +368,10 @@ EXPORT_SYMBOL(set_jammed_length);
 
 void set_number_of_targets(int n)
 {
-	int counter = 0;
+	int counter = 1;
 	targets_end = ql;
 	
-	while (counter < n && targets_end != NULL)
+	while (counter++ < n && targets_end != NULL)
 	{
 		targets_end = targets_end->next;
 	}
